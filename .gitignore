@@ -3,3 +3,13 @@ frontend/node_modules/
 backend/.env
 frontend/.env
 frontend/dist/
+apk/node_modules/
+apk/www/
+apk/*.apk
+apk/android/.gradle/
+apk/android/build/
+apk/android/app/build/
+apk/android/capacitor-cordova-android-plugins/build/
+apk/android/app/src/main/assets/public/
+apk/android/local.properties
+

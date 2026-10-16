@@ -1,0 +1,10 @@
+{
+  "appId": "com.crimetrack.app",
+  "appName": "Crime Track",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#edf1eb",
+    "webContentsDebuggingEnabled": false
+  }
+}
