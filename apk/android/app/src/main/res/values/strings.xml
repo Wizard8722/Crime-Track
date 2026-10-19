@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Crime Track</string>
-    <string name="title_activity_main">Crime Track</string>
+    <string name="app_name">Crime Detector</string>
+    <string name="title_activity_main">Crime Detector</string>
     <string name="package_name">com.crimetrack.app</string>
     <string name="custom_url_scheme">com.crimetrack.app</string>
 </resources>

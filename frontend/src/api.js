@@ -1,7 +1,7 @@
 // Single data access layer for the UI.
 // OFFLINE = Android APK build: reads/writes the on-device IndexedDB database.
 // Regular web build: talks to the Express API + PostgreSQL, exactly as before.
-import { verifyAdmin, searchRecords, allRecords, insertRecord, removeRecord } from './db.js';
+import { verifyAdmin, createAccount, signInAccount, searchRecords, allRecords, insertRecord, removeRecord } from './db.js';
 
 export const OFFLINE = import.meta.env.VITE_OFFLINE === 'true';
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
@@ -44,11 +44,12 @@ export const getNrcReference = async () => {
   }
 };
 
-export const searchCrimes = async (query) => {
+export const searchCrimes = async (query, token = null) => {
   if (OFFLINE) {
+    if (token !== 'local-admin' && !token?.startsWith('local-user:')) return fail(401, 'Sign in to search records saved on this device.');
     const { referenceId, type, number } = query;
     if (!/^\d+$/.test(String(referenceId)) || !/^[NEP]$/.test(String(type)) || !/^\d{6}$/.test(String(number))) return fail(400, MESSAGES.format);
-    return ok(await searchRecords({ referenceId, type, number }));
+    return ok(await searchRecords({ referenceId, type, number }, accountFromToken(token)));
   }
   return http(`/crimes/search?${new URLSearchParams(query)}`);
 };
@@ -62,13 +63,28 @@ export const adminLogin = async (credentials) => {
   return http('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials) });
 };
 
-const guard = (token) => (token ? null : fail(401, MESSAGES.auth));
+export const registerUser = async (credentials) => {
+  if (!OFFLINE) return fail(501, 'Account registration is available in the offline APK.');
+  const result = await createAccount(credentials?.username, credentials?.password);
+  if (result.error) return fail(400, result.error);
+  return ok({ token: `local-user:${encodeURIComponent(result.account.id)}`, account: result.account });
+};
+
+export const userLogin = async (credentials) => {
+  if (!OFFLINE) return fail(501, 'Account sign-in is available in the offline APK.');
+  const account = await signInAccount(credentials?.username, credentials?.password);
+  if (!account) return fail(401, 'Username or password is incorrect.');
+  return ok({ token: `local-user:${encodeURIComponent(account.id)}`, account });
+};
+
+const guard = (token) => (token === 'local-admin' || token?.startsWith('local-user:') ? null : fail(401, MESSAGES.auth));
+const accountFromToken = (token) => token === 'local-admin' ? null : token?.startsWith('local-user:') ? decodeURIComponent(token.slice('local-user:'.length)) : null;
 
 export const listCrimes = async (token) => {
   if (OFFLINE) {
     const denied = guard(token);
     if (denied) return denied;
-    return ok(await allRecords());
+    return ok(await allRecords(accountFromToken(token)));
   }
   return http('/admin/crimes', { headers: { Authorization: `Bearer ${token}` } });
 };
@@ -99,7 +115,7 @@ export const createCrime = async (token, record) => {
       created_at: now,
       updated_at: now,
     };
-    return ok(await insertRecord(row));
+    return ok(await insertRecord(row, accountFromToken(token)));
   }
   return http('/admin/crimes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(record) });
 };
@@ -108,8 +124,8 @@ export const deleteCrime = async (token, id) => {
   if (OFFLINE) {
     const denied = guard(token);
     if (denied) return denied;
-    await removeRecord(id);
-    return ok(null);
+    const removed = await removeRecord(id, accountFromToken(token));
+    return removed ? ok(null) : fail(403, 'You can only delete records saved by your account.');
   }
   return http(`/admin/crimes/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
 };

@@ -1,7 +1,7 @@
 # Builds the offline Android APK for Crime Track (one command).
 #   powershell -ExecutionPolicy Bypass -File .\build-apk.ps1
 # Output:
-#   .\CrimeTrack-debug.apk
+#   .\Crime-Detector-debug.apk
 $ErrorActionPreference = 'Stop'
 $apkRoot = $PSScriptRoot
 $repoRoot = Split-Path -Parent $apkRoot
@@ -74,7 +74,7 @@ if (-not $built) { throw 'Gradle build failed after 5 attempts.' }
 
 $builtApk = Join-Path $apkRoot 'android\app\build\outputs\apk\debug\app-debug.apk'
 if (-not (Test-Path $builtApk)) { throw "APK not found at $builtApk" }
-$target = Join-Path $apkRoot 'CrimeTrack-debug.apk'
+$target = Join-Path $apkRoot 'Crime-Detector-debug.apk'
 Copy-Item $builtApk $target -Force
 $sizeMb = [Math]::Round((Get-Item $target).Length / 1MB, 2)
 Write-Host "`nBUILD SUCCESS" -ForegroundColor Green

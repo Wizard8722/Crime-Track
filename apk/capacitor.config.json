@@ -1,6 +1,6 @@
 {
   "appId": "com.crimetrack.app",
-  "appName": "Crime Track",
+  "appName": "Crime Detector",
   "webDir": "www",
   "android": {
     "allowMixedContent": false,

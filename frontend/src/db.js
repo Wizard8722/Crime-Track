@@ -3,7 +3,7 @@
 // the device, so every search / create / delete works with no internet.
 
 const DB_NAME = 'crime_track';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const DEFAULT_USERNAME = import.meta.env.VITE_ADMIN_USERNAME || 'admin';
 const DEFAULT_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
@@ -26,6 +26,10 @@ export const openDb = () => {
         records.createIndex('by_nrc', ['nrc_reference_id', 'nrc_type', 'nrc_number']);
       }
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('accounts')) {
+        const accounts = db.createObjectStore('accounts', { keyPath: 'id' });
+        accounts.createIndex('by_username', 'username', { unique: true });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -70,30 +74,59 @@ export const verifyAdmin = async (username, password) => {
   return (await hashPassword(String(password ?? ''), admin.salt)) === admin.hash;
 };
 
-export const searchRecords = async ({ referenceId, type, number }) => {
+const normalizeUsername = (username) => String(username ?? '').trim().toLowerCase();
+
+export const createAccount = async (username, password) => {
+  const cleanUsername = normalizeUsername(username);
+  if (!/^[a-z0-9._-]{3,32}$/.test(cleanUsername) || String(password ?? '').length < 6) return { error: 'Use a username of 3–32 letters or numbers and a password of at least 6 characters.' };
+  const db = await openDb();
+  const salt = randomSalt();
+  const account = { id: `user:${cleanUsername}`, username: cleanUsername, salt, hash: await hashPassword(String(password), salt), created_at: new Date().toISOString() };
+  try {
+    await toPromise(db.transaction('accounts', 'readwrite').objectStore('accounts').add(account));
+  } catch (error) {
+    if (error?.name === 'ConstraintError') return { error: 'That username is already registered on this device.' };
+    throw error;
+  }
+  return { account: { id: account.id, username: account.username } };
+};
+
+export const signInAccount = async (username, password) => {
+  const db = await openDb();
+  const account = await toPromise(db.transaction('accounts', 'readonly').objectStore('accounts').index('by_username').get(normalizeUsername(username)));
+  if (!account || (await hashPassword(String(password ?? ''), account.salt)) !== account.hash) return null;
+  return { id: account.id, username: account.username };
+};
+
+export const searchRecords = async ({ referenceId, type, number }, accountId = null) => {
   const db = await openDb();
   const store = db.transaction('crime_records', 'readonly').objectStore('crime_records');
   const key = [Number(referenceId), String(type), String(number)];
   const rows = await toPromise(store.index('by_nrc').getAll(IDBKeyRange.only(key)));
-  return rows.sort((a, b) => String(b.crime_date).localeCompare(String(a.crime_date)));
+  const ownedRows = accountId ? rows.filter((row) => row.owner_id === accountId) : rows;
+  return ownedRows.sort((a, b) => String(b.crime_date).localeCompare(String(a.crime_date)));
 };
 
-export const allRecords = async () => {
+export const allRecords = async (accountId = null) => {
   const db = await openDb();
   const store = db.transaction('crime_records', 'readonly').objectStore('crime_records');
   const rows = await toPromise(store.getAll());
-  return rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const ownedRows = accountId ? rows.filter((row) => row.owner_id === accountId) : rows;
+  return ownedRows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 };
 
-export const insertRecord = async (record) => {
+export const insertRecord = async (record, ownerId = null) => {
   const db = await openDb();
   const store = db.transaction('crime_records', 'readwrite').objectStore('crime_records');
-  const id = await toPromise(store.add(record));
+  const id = await toPromise(store.add({ ...record, owner_id: ownerId }));
   return { ...record, id };
 };
 
-export const removeRecord = async (id) => {
+export const removeRecord = async (id, ownerId = null) => {
   const db = await openDb();
   const store = db.transaction('crime_records', 'readwrite').objectStore('crime_records');
+  const row = await toPromise(store.get(Number(id)));
+  if (!row || (ownerId && row.owner_id !== ownerId)) return false;
   await toPromise(store.delete(Number(id)));
+  return true;
 };

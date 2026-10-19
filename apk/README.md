@@ -31,7 +31,7 @@ cd "apk"
 powershell -ExecutionPolicy Bypass -File .\build-apk.ps1
 ```
 
-Result: **`apk\CrimeTrack-debug.apk`** (debug-signed, ready to install).
+Result: **`apk\Crime-Detector-debug.apk`** (debug-signed, ready to install).
 
 The script performs all steps:
 
@@ -44,10 +44,17 @@ The script performs all steps:
 ## Install on a phone
 
 ```powershell
-adb install "apk\CrimeTrack-debug.apk"
+adb install "apk\Crime-Detector-debug.apk"
 ```
 
 …or copy the APK to the device and open it (allow "install from unknown sources").
+
+## Device accounts
+
+Users can create a username and password from **Administration → New user**.
+Each account's records are stored in the app's private IndexedDB storage on
+that phone, and account views can only list or delete their own records. The
+administrator login remains available from the same sign-in screen.
 
 ## Default admin login
 
@@ -79,7 +86,7 @@ The app makes **no network requests** at runtime.
 `apk/capacitor.config.json`:
 
 ```json
-{ "appId": "com.crimetrack.app", "appName": "Crime Track" }
+{ "appId": "com.crimetrack.app", "appName": "Crime Detector" }
 ```
 
 Change `appId` before the first build (changing it later creates a "different"
