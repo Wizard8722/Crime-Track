@@ -97,7 +97,7 @@ export const createCrime = async (token, record) => {
     const reference = references.find((item) => String(item.id) === String(record.nrcReferenceId));
     const number = String(record.nrcNumber || '');
     const type = String(record.nrcType || '');
-    if (!record.name?.trim() || !reference || !['N', 'E', 'P'].includes(type) || !/^\d{6}$/.test(number) || !record.crimeDate || !record.crimeDetail?.trim()) return fail(400, MESSAGES.required);
+    if (!record.name?.trim() || !reference || !['N', 'E', 'P'].includes(type) || !/^\d{6}$/.test(number) || !record.crimeDate || !record.crimeSection?.trim() || !record.crimeDetail?.trim()) return fail(400, MESSAGES.required);
     const now = new Date().toISOString();
     const row = {
       name: record.name.trim(),
@@ -109,6 +109,7 @@ export const createCrime = async (token, record) => {
       date_of_birth: record.dateOfBirth || null,
       gender: record.gender?.trim() || null,
       crime_date: record.crimeDate,
+      crime_section: record.crimeSection.trim(),
       crime_detail: record.crimeDetail.trim(),
       father_name: record.fatherName?.trim() || null,
       address: record.address?.trim() || null,

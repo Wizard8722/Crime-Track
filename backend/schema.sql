@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS crime_records (
   date_of_birth DATE,
   gender TEXT,
   crime_date DATE NOT NULL,
+  crime_section TEXT NOT NULL DEFAULT '',
   crime_detail TEXT NOT NULL,
   father_name TEXT,
   address TEXT,
@@ -28,5 +29,6 @@ CREATE TABLE IF NOT EXISTS crime_records (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS nrc_reference_id BIGINT REFERENCES nrc_reference(id);
+ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_section TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS crime_records_nrc_idx ON crime_records (nrc_state_code, nrc_township_code, nrc_type, nrc_number);
 CREATE INDEX IF NOT EXISTS crime_records_nrc_reference_idx ON crime_records (nrc_reference_id, nrc_type, nrc_number);

@@ -74,11 +74,11 @@ export const verifyAdmin = async (username, password) => {
   return (await hashPassword(String(password ?? ''), admin.salt)) === admin.hash;
 };
 
-const normalizeUsername = (username) => String(username ?? '').trim().toLowerCase();
+const normalizeUsername = (username) => String(username ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 export const createAccount = async (username, password) => {
   const cleanUsername = normalizeUsername(username);
-  if (!/^[a-z0-9._-]{3,32}$/.test(cleanUsername) || String(password ?? '').length < 6) return { error: 'Use a username of 3–32 letters or numbers and a password of at least 6 characters.' };
+  if (!/^(?=.{3,64}$)[\p{L}\p{N}._ -]+$/u.test(cleanUsername) || String(password ?? '').length < 6) return { error: 'Use a username of 3–64 letters, numbers, spaces, dots, underscores or hyphens and a password of at least 6 characters.' };
   const db = await openDb();
   const salt = randomSalt();
   const account = { id: `user:${cleanUsername}`, username: cleanUsername, salt, hash: await hashPassword(String(password), salt), created_at: new Date().toISOString() };
