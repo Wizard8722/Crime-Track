@@ -4,3 +4,5 @@
 .nrc-grid .field,
 .nrc-grid .field select { min-width: 0; width: 100%; }
 @media(max-width:760px){.nrc-grid{grid-template-columns:minmax(0,1fr)}.nrc-grid .field:last-child{grid-column:auto}.nrc-grid .field select{max-width:100%;white-space:normal}}
+
+.date-input-row{display:flex;align-items:stretch;gap:8px}.date-text{flex:1;min-width:0}.date-text.invalid{border-color:#de694a!important}.calendar-control{position:relative;display:flex;align-items:center;justify-content:center;width:46px;flex:0 0 46px;border:1px solid #d7e0d6;border-radius:3px;background:#fbfcfa;color:#214c3a}.calendar-control input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.calendar-control:focus-within{outline:2px solid #bad7c3;border-color:#5e9a74}.date-error{color:#b44932;font-size:11px;line-height:1.4}
