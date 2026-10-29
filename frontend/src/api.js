@@ -44,12 +44,11 @@ export const getNrcReference = async () => {
   }
 };
 
-export const searchCrimes = async (query, token = null) => {
+export const searchCrimes = async (query) => {
   if (OFFLINE) {
-    if (token !== 'local-admin' && !token?.startsWith('local-user:')) return fail(401, 'Sign in to search records saved on this device.');
     const { referenceId, type, number } = query;
     if (!/^\d+$/.test(String(referenceId)) || !/^[NEP]$/.test(String(type)) || !/^\d{6}$/.test(String(number))) return fail(400, MESSAGES.format);
-    return ok(await searchRecords({ referenceId, type, number }, accountFromToken(token)));
+    return ok(await searchRecords({ referenceId, type, number }));
   }
   return http(`/crimes/search?${new URLSearchParams(query)}`);
 };

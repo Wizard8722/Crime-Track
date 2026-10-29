@@ -53,8 +53,11 @@ adb install "apk\Crime-Detector-debug.apk"
 
 Users can create a username and password from **Administration → New user**.
 Each account's records are stored in the app's private IndexedDB storage on
-that phone, and account views can only list or delete their own records. The
-administrator login remains available from the same sign-in screen.
+that phone, and account views can only list or delete their own records. Public
+NRC search does not require sign-in and searches records saved by every account
+on that phone. Anyone with access to the app on the device can therefore view
+matching personal and crime-record details. The administrator login remains
+available from the same sign-in screen.
 
 ## Default admin login
 
