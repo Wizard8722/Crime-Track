@@ -16,6 +16,12 @@ try {
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS nrc_reference_source_row_idx ON nrc_reference (state_code, township_code_mm, township_code_en, township_mm, township_en)');
   await pool.query('ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS nrc_reference_id BIGINT REFERENCES nrc_reference(id)');
   await pool.query("ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_section TEXT NOT NULL DEFAULT ''");
+  await pool.query("ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_detail_text TEXT NOT NULL DEFAULT ''");
+  await pool.query('ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_pdf_name TEXT');
+  await pool.query('ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_pdf_data TEXT');
+  await pool.query('ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_photo_name TEXT');
+  await pool.query('ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_photo_data TEXT');
+  await pool.query('ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS face_signature TEXT');
   await pool.query('CREATE INDEX IF NOT EXISTS crime_records_nrc_reference_idx ON crime_records (nrc_reference_id, nrc_type, nrc_number)');
   const csv = parseCsv(await fs.readFile(path.join(root, 'dataset/full_nrc_dataset.csv'), 'utf8'));
   for (const item of csv) {

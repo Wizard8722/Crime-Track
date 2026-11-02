@@ -81,21 +81,72 @@ export const createAccount = async (username, password) => {
   if (!/^(?=.{3,64}$)[\p{L}\p{N}._ -]+$/u.test(cleanUsername) || String(password ?? '').length < 6) return { error: 'Use a username of 3–64 letters, numbers, spaces, dots, underscores or hyphens and a password of at least 6 characters.' };
   const db = await openDb();
   const salt = randomSalt();
-  const account = { id: `user:${cleanUsername}`, username: cleanUsername, salt, hash: await hashPassword(String(password), salt), created_at: new Date().toISOString() };
+  const account = { id: `user:${cleanUsername}`, username: cleanUsername, role: 'user', salt, hash: await hashPassword(String(password), salt), created_at: new Date().toISOString() };
   try {
     await toPromise(db.transaction('accounts', 'readwrite').objectStore('accounts').add(account));
   } catch (error) {
     if (error?.name === 'ConstraintError') return { error: 'That username is already registered on this device.' };
     throw error;
   }
-  return { account: { id: account.id, username: account.username } };
+  return { account: { id: account.id, username: account.username, role: account.role } };
 };
 
 export const signInAccount = async (username, password) => {
   const db = await openDb();
   const account = await toPromise(db.transaction('accounts', 'readonly').objectStore('accounts').index('by_username').get(normalizeUsername(username)));
   if (!account || (await hashPassword(String(password ?? ''), account.salt)) !== account.hash) return null;
-  return { id: account.id, username: account.username };
+  return { id: account.id, username: account.username, role: account.role || 'user' };
+};
+
+export const getAccount = async (accountId) => {
+  const db = await openDb();
+  const account = await toPromise(db.transaction('accounts', 'readonly').objectStore('accounts').get(accountId));
+  return account ? { id: account.id, username: account.username, role: account.role || 'user', created_at: account.created_at } : null;
+};
+
+export const listAccounts = async () => {
+  const db = await openDb();
+  const accounts = await toPromise(db.transaction('accounts', 'readonly').objectStore('accounts').getAll());
+  return accounts.map(({ id, username, role, created_at }) => ({ id, username, role: role || 'user', created_at }));
+};
+
+export const setAccountRole = async (accountId, role) => {
+  if (!['user', 'admin'].includes(role)) return false;
+  const db = await openDb();
+  const store = db.transaction('accounts', 'readwrite').objectStore('accounts');
+  const account = await toPromise(store.get(accountId));
+  if (!account) return false;
+  await toPromise(store.put({ ...account, role }));
+  return true;
+};
+
+export const deleteAccount = async (accountId) => {
+  const db = await openDb();
+  await toPromise(db.transaction('accounts', 'readwrite').objectStore('accounts').delete(accountId));
+  return true;
+};
+
+export const changeAccountPassword = async (accountId, currentPassword, newPassword) => {
+  if (String(newPassword ?? '').length < 6) return { error: 'Password must be at least 6 characters.' };
+  const db = await openDb();
+  const store = db.transaction('accounts', 'readwrite').objectStore('accounts');
+  const account = await toPromise(store.get(accountId));
+  if (!account || (await hashPassword(String(currentPassword ?? ''), account.salt)) !== account.hash) return { error: 'Current password is incorrect.' };
+  const salt = randomSalt();
+  await toPromise(store.put({ ...account, salt, hash: await hashPassword(String(newPassword), salt) }));
+  return { ok: true };
+};
+
+export const changeAdminPassword = async (username, currentPassword, newPassword) => {
+  if (String(newPassword ?? '').length < 6) return { error: 'Password must be at least 6 characters.' };
+  const db = await openDb();
+  await ensureAdmin(db);
+  const meta = db.transaction('meta', 'readwrite').objectStore('meta');
+  const admin = await getMeta(db, 'admin');
+  if (admin.username !== username || (await hashPassword(String(currentPassword ?? ''), admin.salt)) !== admin.hash) return { error: 'Current password is incorrect.' };
+  const salt = randomSalt();
+  await toPromise(meta.put({ ...admin, salt, hash: await hashPassword(String(newPassword), salt) }));
+  return { ok: true };
 };
 
 export const searchRecords = async ({ referenceId, type, number }, accountId = null) => {
@@ -105,6 +156,29 @@ export const searchRecords = async ({ referenceId, type, number }, accountId = n
   const rows = await toPromise(store.index('by_nrc').getAll(IDBKeyRange.only(key)));
   const ownedRows = accountId ? rows.filter((row) => row.owner_id === accountId) : rows;
   return ownedRows.sort((a, b) => String(b.crime_date).localeCompare(String(a.crime_date)));
+};
+
+const signatureDistance = (left, right) => {
+  if (!left || !right || left.length !== right.length) return 256;
+  let distance = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    let xor = parseInt(left[index], 16) ^ parseInt(right[index], 16);
+    while (xor) { distance += xor & 1; xor >>= 1; }
+  }
+  return distance;
+};
+
+export const searchRecordsByFace = async ({ signature, name = '' }) => {
+  if (!/^[0-9a-f]{64}$/.test(String(signature || ''))) return [];
+  const db = await openDb();
+  const rows = await toPromise(db.transaction('crime_records', 'readonly').objectStore('crime_records').getAll());
+  const queryName = name.trim().toLowerCase();
+  return rows
+    .filter((row) => row.face_signature && (!queryName || String(row.name || '').toLowerCase().includes(queryName)))
+    .map((row) => ({ row, distance: signatureDistance(signature, row.face_signature) }))
+    .filter((item) => item.distance <= 10)
+    .sort((a, b) => a.distance - b.distance || String(b.row.crime_date).localeCompare(String(a.row.crime_date)))
+    .map((item) => item.row);
 };
 
 export const allRecords = async (accountId = null) => {

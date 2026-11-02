@@ -23,10 +23,23 @@ CREATE TABLE IF NOT EXISTS crime_records (
   crime_date DATE NOT NULL,
   crime_section TEXT NOT NULL DEFAULT '',
   crime_detail TEXT NOT NULL,
+  crime_detail_text TEXT NOT NULL DEFAULT '',
+  crime_pdf_name TEXT,
+  crime_pdf_data TEXT,
+  crime_photo_name TEXT,
+  crime_photo_data TEXT,
+  face_signature TEXT,
   father_name TEXT,
   address TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS users (
+  id BIGSERIAL PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS nrc_reference_id BIGINT REFERENCES nrc_reference(id);
 ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_section TEXT NOT NULL DEFAULT '';
