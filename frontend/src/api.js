@@ -1,4 +1,4 @@
-import { verifyAdmin, createAccount, signInAccount, getAccount, listAccounts as listAccountsOffline, setAccountRole, deleteAccount, changeAccountPassword, changeAdminPassword, searchRecords, searchRecordsByFace, allRecords, insertRecord, removeRecord } from './db.js';
+import { verifyAdmin, createAccount, signInAccount, getAccount, listAccounts as listAccountsOffline, setAccountRole, deleteAccount, changeAccountPassword, changeAdminPassword, updateAccountPhoto, searchRecords, searchRecordsByFace, allRecords, insertRecord, removeRecord, updateRecord, setRecordApproval } from './db.js';
 
 export const OFFLINE = import.meta.env.VITE_OFFLINE === 'true';
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
@@ -67,7 +67,7 @@ const accountFromToken = (token) => token === 'local-admin' ? null : token?.star
 const guard = (token) => (token === 'local-admin' || token?.startsWith('local-user:') ? null : fail(401, MESSAGES.auth));
 export const getProfile = async (token) => {
   if (!OFFLINE) return http('/account/profile', { headers: authHeaders(token) });
-  if (token === 'local-admin') return ok({ id: 'admin', username: ADMIN_USERNAME, role: 'admin' });
+  if (token === 'local-admin') return ok({ id: 'admin', username: ADMIN_USERNAME, role: 'admin', account_photo: '', is_auto_admin: true });
   const id = accountFromToken(token);
   if (!id) return fail(401, MESSAGES.auth);
   const account = await getAccount(id);
@@ -107,7 +107,7 @@ export const listCrimes = async (token) => {
     if (denied) return denied;
     if (token === 'local-admin') return ok(await allRecords());
     const account = await getAccount(accountFromToken(token));
-    return account?.role === 'admin' ? ok(await allRecords()) : ok([]);
+    return account?.role === 'admin' ? ok(await allRecords(account.id)) : ok([]);
   }
   return http('/admin/crimes', { headers: authHeaders(token) });
 };
@@ -125,7 +125,8 @@ export const createCrime = async (token, record) => {
     const type = String(record.nrcType || '');
     if (!record.name?.trim() || !reference || !['N','E','P'].includes(type) || !/^\d{6}$/.test(number) || !record.crimeDate || !record.crimeSection?.trim() || !record.crimeDetail?.trim()) return fail(400, MESSAGES.required);
     const now = new Date().toISOString();
-    const row = { name: record.name.trim(), nrc_state_code: reference.state_code, nrc_township_code: reference.township_code_mm, nrc_reference_id: reference.id, nrc_type: type, nrc_number: number, date_of_birth: record.dateOfBirth || null, gender: record.gender?.trim() || null, crime_date: record.crimeDate, crime_section: record.crimeSection.trim(), crime_detail: record.crimeDetail.trim(), crime_detail_text: record.crimeDetailText?.trim() || '', crime_pdf_name: record.crimePdfName || null, crime_pdf_data: record.crimePdfData || null, crime_photo_name: record.crimePhotoName || null, crime_photo_data: record.crimePhotoData || null, face_signature: record.faceSignature || null, father_name: record.fatherName?.trim() || null, address: record.address?.trim() || null, created_at: now, updated_at: now };
+    const ownerId = token === 'local-admin' ? null : accountFromToken(token);
+    const row = { name: record.name.trim(), nrc_state_code: reference.state_code, nrc_township_code: reference.township_code_mm, nrc_reference_id: reference.id, nrc_type: type, nrc_number: number, date_of_birth: record.dateOfBirth || null, gender: record.gender?.trim() || null, crime_date: record.crimeDate, crime_section: record.crimeSection.trim(), crime_detail: record.crimeDetail.trim(), crime_detail_text: record.crimeDetailText?.trim() || '', crime_pdf_name: record.crimePdfName || null, crime_pdf_data: record.crimePdfData || null, crime_photo_name: record.crimePhotoName || null, crime_photo_data: record.crimePhotoData || null, face_signature: record.faceSignature || null, father_name: record.fatherName?.trim() || null, address: record.address?.trim() || null, approval_status: token === 'local-admin' ? 'approved' : 'pending', created_at: now, updated_at: now };
     return ok(await insertRecord(row, accountFromToken(token)));
   }
   return http('/admin/crimes', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders(token) }, body: JSON.stringify(record) });
@@ -138,8 +139,42 @@ export const deleteCrime = async (token, id) => {
       const account = await getAccount(accountFromToken(token));
       if (account?.role !== 'admin') return fail(403, 'Only administrators can delete crime records.');
     }
-    const removed = await removeRecord(id, null);
+    const ownerId = token === 'local-admin' ? null : accountFromToken(token);
+    const removed = await removeRecord(id, ownerId);
     return removed ? ok(null) : fail(403, 'Record could not be deleted.');
   }
   return http(`/admin/crimes/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders(token) });
+};
+
+export const updateCrime = async (token, id, record) => {
+  if (!OFFLINE) return http(`/admin/crimes/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders(token) }, body: JSON.stringify(record) });
+  if (token === 'local-admin') return fail(403, 'Use record approval or delete actions for the auto administrator.');
+  const account = await getAccount(accountFromToken(token));
+  if (account?.role !== 'admin') return fail(403, 'Only user administrators can edit crime records.');
+  const references = await referenceData();
+  const reference = references.find((item) => String(item.id) === String(record.nrcReferenceId));
+  if (!reference) return fail(400, MESSAGES.required);
+  const changes = {
+    name: record.name?.trim(), nrc_state_code: reference.state_code, nrc_township_code: reference.township_code_mm,
+    nrc_reference_id: reference.id, nrc_type: record.nrcType, nrc_number: String(record.nrcNumber || ''),
+    date_of_birth: record.dateOfBirth || null, gender: record.gender || null, crime_date: record.crimeDate,
+    crime_section: record.crimeSection?.trim(), crime_detail: record.crimeDetail?.trim(),
+    crime_detail_text: record.crimeDetailText?.trim() || '', crime_pdf_name: record.crimePdfName || null,
+    crime_pdf_data: record.crimePdfData || null, crime_photo_name: record.crimePhotoName || null,
+    crime_photo_data: record.crimePhotoData || null, face_signature: record.faceSignature || null,
+    father_name: record.fatherName?.trim() || null, address: record.address?.trim() || null
+  };
+  return await updateRecord(id, changes, account.id) ? ok(null) : fail(403, 'Record could not be edited.');
+};
+
+export const approveCrime = async (token, id, status = 'approved') => {
+  if (!OFFLINE) return http(`/admin/crimes/${encodeURIComponent(id)}/approval`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders(token) }, body: JSON.stringify({ status }) });
+  if (token !== 'local-admin') return fail(403, 'Only the auto administrator can approve records.');
+  return await setRecordApproval(id, status) ? ok(null) : fail(404, 'Record not found.');
+};
+
+export const saveAccountPhoto = async (token, accountPhoto) => {
+  if (!OFFLINE) return http('/account/profile/photo', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders(token) }, body: JSON.stringify({ accountPhoto }) });
+  if (token === 'local-admin') return ok(null);
+  return await updateAccountPhoto(accountFromToken(token), accountPhoto) ? ok(null) : fail(404, 'Account not found.');
 };

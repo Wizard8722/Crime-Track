@@ -3,7 +3,7 @@
 // the device, so every search / create / delete works with no internet.
 
 const DB_NAME = 'crime_track';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const DEFAULT_USERNAME = import.meta.env.VITE_ADMIN_USERNAME || 'admin';
 const DEFAULT_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123';
@@ -81,7 +81,7 @@ export const createAccount = async (username, password) => {
   if (!/^(?=.{3,64}$)[\p{L}\p{N}._ -]+$/u.test(cleanUsername) || String(password ?? '').length < 6) return { error: 'Use a username of 3–64 letters, numbers, spaces, dots, underscores or hyphens and a password of at least 6 characters.' };
   const db = await openDb();
   const salt = randomSalt();
-  const account = { id: `user:${cleanUsername}`, username: cleanUsername, role: 'user', salt, hash: await hashPassword(String(password), salt), created_at: new Date().toISOString() };
+  const account = { id: `user:${cleanUsername}`, username: cleanUsername, role: 'user', account_photo: '', salt, hash: await hashPassword(String(password), salt), created_at: new Date().toISOString() };
   try {
     await toPromise(db.transaction('accounts', 'readwrite').objectStore('accounts').add(account));
   } catch (error) {
@@ -101,13 +101,22 @@ export const signInAccount = async (username, password) => {
 export const getAccount = async (accountId) => {
   const db = await openDb();
   const account = await toPromise(db.transaction('accounts', 'readonly').objectStore('accounts').get(accountId));
-  return account ? { id: account.id, username: account.username, role: account.role || 'user', created_at: account.created_at } : null;
+  return account ? { id: account.id, username: account.username, role: account.role || 'user', account_photo: account.account_photo || '', created_at: account.created_at } : null;
 };
 
 export const listAccounts = async () => {
   const db = await openDb();
   const accounts = await toPromise(db.transaction('accounts', 'readonly').objectStore('accounts').getAll());
-  return accounts.map(({ id, username, role, created_at }) => ({ id, username, role: role || 'user', created_at }));
+  return accounts.map(({ id, username, role, account_photo, created_at }) => ({ id, username, role: role || 'user', account_photo: account_photo || '', created_at }));
+};
+
+export const updateAccountPhoto = async (accountId, accountPhoto) => {
+  const db = await openDb();
+  const store = db.transaction('accounts', 'readwrite').objectStore('accounts');
+  const account = await toPromise(store.get(accountId));
+  if (!account) return false;
+  await toPromise(store.put({ ...account, account_photo: accountPhoto }));
+  return true;
 };
 
 export const setAccountRole = async (accountId, role) => {
@@ -192,7 +201,7 @@ export const allRecords = async (accountId = null) => {
 export const insertRecord = async (record, ownerId = null) => {
   const db = await openDb();
   const store = db.transaction('crime_records', 'readwrite').objectStore('crime_records');
-  const id = await toPromise(store.add({ ...record, owner_id: ownerId }));
+  const id = await toPromise(store.add({ ...record, owner_id: ownerId, approval_status: record.owner_id === 'local-admin' || ownerId === null ? 'approved' : (record.approval_status || 'pending') }));
   return { ...record, id };
 };
 
@@ -202,5 +211,24 @@ export const removeRecord = async (id, ownerId = null) => {
   const row = await toPromise(store.get(Number(id)));
   if (!row || (ownerId && row.owner_id !== ownerId)) return false;
   await toPromise(store.delete(Number(id)));
+  return true;
+};
+
+export const updateRecord = async (id, record, ownerId) => {
+  const db = await openDb();
+  const store = db.transaction('crime_records', 'readwrite').objectStore('crime_records');
+  const row = await toPromise(store.get(Number(id)));
+  if (!row || row.owner_id !== ownerId) return false;
+  await toPromise(store.put({ ...row, ...record, owner_id: ownerId, updated_at: new Date().toISOString(), approval_status: 'pending' }));
+  return true;
+};
+
+export const setRecordApproval = async (id, status) => {
+  if (!['approved', 'rejected', 'pending'].includes(status)) return false;
+  const db = await openDb();
+  const store = db.transaction('crime_records', 'readwrite').objectStore('crime_records');
+  const row = await toPromise(store.get(Number(id)));
+  if (!row) return false;
+  await toPromise(store.put({ ...row, approval_status: status, updated_at: new Date().toISOString() }));
   return true;
 };

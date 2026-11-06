@@ -51,7 +51,16 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   if (!user || !(await bcrypt.compare(String(req.body?.password || ''), user.password_hash))) return res.status(401).json({ message: 'Username or password is incorrect.' });
   res.json({ token: jwt.sign({ id: String(user.id), username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: '8h' }), account: { id: user.id, username: user.username, role: user.role, created_at: user.created_at } });
 }));
-app.get('/api/account/profile', authenticate, asyncRoute(async (req, res) => res.json({ id: req.admin.id, username: req.admin.username, role: req.admin.role })));
+app.get('/api/account/profile', authenticate, asyncRoute(async (req, res) => {
+  if (req.admin.id === 'admin') return res.json({ id: req.admin.id, username: req.admin.username, role: req.admin.role, is_auto_admin: true, account_photo: '' });
+  const { rows } = await pool.query('SELECT id,username,role,account_photo FROM users WHERE id=$1', [req.admin.id]);
+  res.json(rows[0] || null);
+}));
+app.patch('/api/account/profile/photo', authenticate, asyncRoute(async (req, res) => {
+  if (req.admin.id === 'admin') return res.json({ ok: true });
+  await pool.query('UPDATE users SET account_photo=$1 WHERE id=$2', [String(req.body?.accountPhoto || '').slice(0, 40000000), req.admin.id]);
+  res.json({ ok: true });
+}));
 app.patch('/api/account/password', authenticate, asyncRoute(async (req, res) => {
   const newPassword = String(req.body?.newPassword || '');
   if (newPassword.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters.' });
@@ -62,7 +71,7 @@ app.patch('/api/account/password', authenticate, asyncRoute(async (req, res) => 
   res.json({ ok: true });
 }));
 app.get('/api/admin/accounts', authenticate, requireAdmin, asyncRoute(async (req, res) => {
-  const { rows } = await pool.query('SELECT id,username,role,created_at FROM users ORDER BY created_at DESC');
+  const { rows } = await pool.query('SELECT id,username,role,account_photo,created_at FROM users ORDER BY created_at DESC');
   res.json(rows);
 }));
 app.patch('/api/admin/accounts/:id/promote', authenticate, requireAdmin, asyncRoute(async (req, res) => {
@@ -101,14 +110,48 @@ app.post('/api/crimes/face-search', asyncRoute(async (req, res) => {
   const matches = rows.filter((row) => distance(signature, row.face_signature || '') <= 10).sort((a, b) => distance(signature, a.face_signature || '') - distance(signature, b.face_signature || '') || String(b.crime_date).localeCompare(String(a.crime_date)));
   res.json(matches);
 }));
-app.get('/api/admin/crimes', authenticate, requireAdmin, asyncRoute(async (req, res) => { const { rows } = await pool.query('SELECT * FROM crime_records ORDER BY created_at DESC'); res.json(rows); }));
+app.get('/api/admin/crimes', authenticate, requireAdmin, asyncRoute(async (req, res) => {
+  const { rows } = req.admin.id === 'admin'
+    ? await pool.query('SELECT * FROM crime_records ORDER BY created_at DESC')
+    : await pool.query('SELECT * FROM crime_records WHERE owner_id=$1 ORDER BY created_at DESC', [req.admin.id]);
+  res.json(rows);
+}));
 app.post('/api/admin/crimes', authenticate, requireAdmin, asyncRoute(async (req, res) => {
   const { rows: references } = await pool.query('SELECT id, state_code, township_code_mm FROM nrc_reference WHERE id=$1', [req.body.nrcReferenceId]);
   const reference = references[0];
   const values = nrcParams(req.body, reference || {});
   if (!values[0] || !reference || !['N','E','P'].includes(values[4]) || !/^\d{6}$/.test(values[5]) || !values[8] || !values[9] || !values[10]) return res.status(400).json({ message: 'လိုအပ်သော အချက်အလက်များကို ဖြည့်ပါ။' });
-  const { rows } = await pool.query('INSERT INTO crime_records (name,nrc_state_code,nrc_township_code,nrc_reference_id,nrc_type,nrc_number,date_of_birth,gender,crime_date,crime_section,crime_detail,crime_detail_text,crime_pdf_name,crime_pdf_data,crime_photo_name,crime_photo_data,face_signature,father_name,address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *', values); res.status(201).json(rows[0]);
+  const status = req.admin.id === 'admin' ? 'approved' : 'pending';
+  const ownerId = req.admin.id === 'admin' ? null : req.admin.id;
+  const { rows } = await pool.query('INSERT INTO crime_records (name,nrc_state_code,nrc_township_code,nrc_reference_id,nrc_type,nrc_number,date_of_birth,gender,crime_date,crime_section,crime_detail,crime_detail_text,crime_pdf_name,crime_pdf_data,crime_photo_name,crime_photo_data,face_signature,father_name,address,owner_id,approval_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *', [...values, ownerId, status]); res.status(201).json(rows[0]);
 }));
-app.delete('/api/admin/crimes/:id', authenticate, requireAdmin, asyncRoute(async (req, res) => { await pool.query('DELETE FROM crime_records WHERE id=$1', [req.params.id]); res.status(204).end(); }));
+app.patch('/api/admin/crimes/:id/approval', authenticate, requireAdmin, asyncRoute(async (req, res) => {
+  if (req.admin.id !== 'admin') return res.status(403).json({ message: 'Only the auto administrator can approve records.' });
+  const status = String(req.body?.status || 'approved');
+  if (!['approved','rejected','pending'].includes(status)) return res.status(400).json({ message: 'Invalid approval status.' });
+  const { rowCount } = await pool.query('UPDATE crime_records SET approval_status=$1,updated_at=NOW() WHERE id=$2', [status, req.params.id]);
+  if (!rowCount) return res.status(404).json({ message: 'Record not found.' });
+  res.json({ ok: true });
+}));
+app.patch('/api/admin/crimes/:id', authenticate, requireAdmin, asyncRoute(async (req, res) => {
+  const { rows } = await pool.query('SELECT owner_id FROM crime_records WHERE id=$1', [req.params.id]);
+  if (!rows[0] || (req.admin.id !== 'admin' && String(rows[0].owner_id) !== String(req.admin.id))) return res.status(403).json({ message: 'You can only repair your own records.' });
+  const { rows: references } = await pool.query('SELECT id,state_code,township_code_mm FROM nrc_reference WHERE id=$1', [req.body.nrcReferenceId]);
+  const reference = references[0];
+  if (!reference) return res.status(400).json({ message: 'Required information is missing.' });
+  const { rows: updated } = await pool.query('UPDATE crime_records SET name=$1,nrc_state_code=$2,nrc_township_code=$3,nrc_reference_id=$4,nrc_type=$5,nrc_number=$6,date_of_birth=$7,gender=$8,crime_date=$9,crime_section=$10,crime_detail=$11,crime_detail_text=$12,crime_pdf_name=$13,crime_pdf_data=$14,crime_photo_name=$15,crime_photo_data=$16,face_signature=$17,father_name=$18,address=$19,approval_status=$20,updated_at=NOW() WHERE id=$21 RETURNING *', [
+    req.body.name?.trim(), reference.state_code, reference.township_code_mm, reference.id, req.body.nrcType, req.body.nrcNumber,
+    req.body.dateOfBirth || null, req.body.gender || null, req.body.crimeDate, req.body.crimeSection?.trim(), req.body.crimeDetail?.trim(),
+    req.body.crimeDetailText?.trim() || '', req.body.crimePdfName || null, req.body.crimePdfData || null, req.body.crimePhotoName || null,
+    req.body.crimePhotoData || null, req.body.faceSignature || null, req.body.fatherName?.trim() || null, req.body.address?.trim() || null,
+    req.admin.id === 'admin' ? 'approved' : 'pending', req.params.id
+  ]);
+  res.json(updated[0]);
+}));
+app.delete('/api/admin/crimes/:id', authenticate, requireAdmin, asyncRoute(async (req, res) => {
+  if (req.admin.id === 'admin') await pool.query('DELETE FROM crime_records WHERE id=$1', [req.params.id]);
+  else await pool.query('DELETE FROM crime_records WHERE id=$1 AND owner_id=$2', [req.params.id, req.admin.id]);
+  res.status(204).end();
+}));
 app.use((error, req, res, next) => { console.error(error); res.status(500).json({ message: 'ဆာဗာအတွင်း အမှားတစ်ခု ဖြစ်ပွားပါသည်။' }); });
 app.listen(process.env.PORT || 4000, () => console.log(`Crime Track API listening on ${process.env.PORT || 4000}`));

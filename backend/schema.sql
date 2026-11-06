@@ -43,5 +43,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS nrc_reference_id BIGINT REFERENCES nrc_reference(id);
 ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS crime_section TEXT NOT NULL DEFAULT '';
+ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS owner_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved' CHECK (approval_status IN ('pending','approved','rejected'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_photo TEXT;
 CREATE INDEX IF NOT EXISTS crime_records_nrc_idx ON crime_records (nrc_state_code, nrc_township_code, nrc_type, nrc_number);
 CREATE INDEX IF NOT EXISTS crime_records_nrc_reference_idx ON crime_records (nrc_reference_id, nrc_type, nrc_number);
