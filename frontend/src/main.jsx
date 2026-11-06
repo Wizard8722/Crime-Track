@@ -96,6 +96,7 @@ function PublicSearch({ refs }) {
   const [facePhotoName,setFacePhotoName] = useState('');
   const [signature,setSignature] = useState('');
   const [cameraOpen,setCameraOpen] = useState(false);
+  const [cameraReady,setCameraReady] = useState(false);
   const videoRef = React.useRef(null);
   const streamRef = React.useRef(null);
   const search = async (event) => {
@@ -105,25 +106,44 @@ function PublicSearch({ refs }) {
   };
   const openCamera = async () => {
     setError('');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('In-app camera is not available in this browser.');
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
       streamRef.current = stream;
+      setCameraReady(false);
       setCameraOpen(true);
-      setTimeout(() => { if (videoRef.current) videoRef.current.srcObject = stream; }, 0);
-    } catch { setError('Camera permission is required to capture a face.'); }
+    } catch (cameraError) {
+      setError(cameraError?.name === 'NotAllowedError'
+        ? 'Allow camera permission to scan a crime photo in the app.'
+        : 'Could not open the in-app camera. Check that a camera is available.');
+    }
   };
   const closeCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    setCameraReady(false);
     setCameraOpen(false);
   };
+  useEffect(() => {
+    if (!cameraOpen || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+    videoRef.current.play().catch(() => setError('Could not start the in-app camera preview.'));
+  }, [cameraOpen]);
   useEffect(() => () => closeCamera(), []);
   const captureFace = async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !cameraReady) return;
     const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
-    canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context || !canvas.width || !canvas.height) {
+      setError('Camera preview is not ready yet.');
+      return;
+    }
+    context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
     setFacePhoto(dataUrl);
     setFacePhotoName('camera-capture.jpg');
@@ -131,18 +151,18 @@ function PublicSearch({ refs }) {
   };
   const faceSearch = async (event) => {
     event.preventDefault(); setError('');
-    if (!signature) return setError('Select a human face photo first.');
+    if (!signature) return setError('Open the in-app camera and capture a crime photo first.');
     const response = await searchCrimesByFace({ signature, name: faceName });
     if (!response.ok) setError(response.data?.message); else setResults(response.data);
   };
   return <main><section className="hero"><div className="hero-copy"><span className="eyebrow"><ShieldCheck size={15}/> အစိုးရ အသုံးပြုရန်</span><h1>Crime<br/><em>Detector</em></h1><p>NRC နံပါတ် သို့မဟုတ် လူပုံဖြင့် ပြစ်မှုမှတ်တမ်းကို ရှာဖွေပါ။</p></div>
     <div className="search-panel-stack">
-      <div className="subtabs" role="tablist"><button type="button" className={searchSubTab==='nrc'?'active':''} onClick={() => { setSearchSubTab('nrc'); setError(''); }}>NRC Search</button><button type="button" className={searchSubTab==='face'?'active':''} onClick={() => { setSearchSubTab('face'); setError(''); }}>Face Scan</button></div>
+      <div className="subtabs" role="tablist"><button type="button" className={searchSubTab==='nrc'?'active':''} onClick={() => { closeCamera(); setSearchSubTab('nrc'); setError(''); }}>NRC Search</button><button type="button" className={searchSubTab==='face'?'active':''} onClick={() => { setSearchSubTab('face'); setError(''); }}>Face Scan</button></div>
       {searchSubTab === 'nrc'
         ? <form className="search-panel" onSubmit={search}><div className="panel-heading"><span>01</span><div><h2>NRC ဖြင့်ရှာဖွေမည်</h2><p>မှတ်ပုံတင်နံပါတ် အပြည့်အစုံကို ဖြည့်ပါ</p></div></div><NrcPicker record={record} setRecord={setRecord} refs={refs}/>{error && <div className="error">{error}</div>}<button className="primary" type="submit"><Search size={18}/> ရှာဖွေမည်</button></form>
-        : <form className="search-panel" onSubmit={faceSearch}><div className="panel-heading"><span>02</span><div><h2>Face Scan ဖြင့်ရှာဖွေမည်</h2><p>Camera ဖြင့်တိုက်ရိုက် ရှာဖွေပါ</p></div></div><Field name="faceName" label="ဖြစ်စဉ်ရှိ အမည်" value={faceName} onChange={setFaceName} placeholder="Criminal name"/>
-          {!cameraOpen && <button className="ghost" type="button" onClick={openCamera}><Camera size={18}/> Open Camera</button>}
-          {cameraOpen && <div className="camera-box"><video ref={videoRef} autoPlay playsInline muted/><button className="primary" type="button" onClick={captureFace}><Camera size={18}/> Capture face</button><button className="ghost" type="button" onClick={closeCamera}>Close camera</button></div>}
+        : <form className="search-panel" onSubmit={faceSearch}><div className="panel-heading"><span>02</span><div><h2>Face Scan ဖြင့်ရှာဖွေမည်</h2><p>Open the camera and scan within the app</p></div></div><p className="camera-note">Face scan searches crime-record photos only. Account profile photos are not searched.</p><Field name="faceName" label="ဖြစ်စဉ်ရှိ အမည်" value={faceName} onChange={setFaceName} placeholder="Criminal name"/>
+          {!cameraOpen && <button className="primary" type="button" onClick={openCamera}><Camera size={18}/> Open in-app camera</button>}
+          {cameraOpen && <div className="camera-box"><video ref={videoRef} autoPlay playsInline muted onCanPlay={() => setCameraReady(true)}/><button className="primary" type="button" onClick={captureFace} disabled={!cameraReady}><Camera size={18}/> Capture crime photo</button><button className="ghost" type="button" onClick={closeCamera}>Close camera</button></div>}
           {facePhoto && <img className="face-preview" src={facePhoto} alt="Captured face"/>}{facePhotoName && <small>Captured: {facePhotoName}</small>}{error && <div className="error">{error}</div>}<button className="primary" type="submit"><Search size={18}/> Face ဖြင့်ရှာဖွေမည်</button></form>}
     </div>
   </section><Results results={results} refs={refs}/></main>;
