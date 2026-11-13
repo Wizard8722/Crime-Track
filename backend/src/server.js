@@ -89,9 +89,9 @@ app.delete('/api/admin/accounts/:id/delete', authenticate, requireAdmin, asyncRo
   res.status(204).end();
 }));
 app.get('/api/crimes/search', asyncRoute(async (req, res) => {
-  const { referenceId, type, number } = req.query;
-  if (!/^\d+$/.test(String(referenceId)) || !/^[NEP]$/.test(type) || !/^\d{6}$/.test(String(number))) return res.status(400).json({ message: 'NRC နံပါတ် ပုံစံမမှန်ပါ။' });
-  const { rows } = await pool.query('SELECT id, name, nrc_state_code, nrc_township_code, nrc_type, nrc_number, date_of_birth, gender, crime_date, crime_section, crime_detail, crime_detail_text, crime_pdf_name, crime_pdf_data, crime_photo_name, crime_photo_data, father_name, address, created_at FROM crime_records WHERE nrc_reference_id=$1 AND nrc_type=$2 AND nrc_number=$3 ORDER BY crime_date DESC', [referenceId, type, number]);
+  const { number } = req.query;
+  if (!/^\d{6}$/.test(String(number))) return res.status(400).json({ message: 'NRC နံပါတ် ပုံစံမမှန်ပါ။' });
+  const { rows } = await pool.query('SELECT id, name, nrc_state_code, nrc_township_code, nrc_reference_id, nrc_type, nrc_number, date_of_birth, gender, crime_date, crime_section, crime_detail, crime_detail_text, crime_pdf_name, crime_pdf_data, crime_photo_name, crime_photo_data, father_name, address, created_at FROM crime_records WHERE nrc_number=$1 ORDER BY crime_date DESC', [number]);
   res.json(rows);
 }));
 app.post('/api/crimes/face-search', asyncRoute(async (req, res) => {
@@ -111,9 +111,7 @@ app.post('/api/crimes/face-search', asyncRoute(async (req, res) => {
   res.json(matches);
 }));
 app.get('/api/admin/crimes', authenticate, requireAdmin, asyncRoute(async (req, res) => {
-  const { rows } = req.admin.id === 'admin'
-    ? await pool.query('SELECT * FROM crime_records ORDER BY created_at DESC')
-    : await pool.query('SELECT * FROM crime_records WHERE owner_id=$1 ORDER BY created_at DESC', [req.admin.id]);
+  const { rows } = await pool.query('SELECT * FROM crime_records ORDER BY created_at DESC');
   res.json(rows);
 }));
 app.post('/api/admin/crimes', authenticate, requireAdmin, asyncRoute(async (req, res) => {
@@ -149,8 +147,12 @@ app.patch('/api/admin/crimes/:id', authenticate, requireAdmin, asyncRoute(async 
   res.json(updated[0]);
 }));
 app.delete('/api/admin/crimes/:id', authenticate, requireAdmin, asyncRoute(async (req, res) => {
-  if (req.admin.id === 'admin') await pool.query('DELETE FROM crime_records WHERE id=$1', [req.params.id]);
-  else await pool.query('DELETE FROM crime_records WHERE id=$1 AND owner_id=$2', [req.params.id, req.admin.id]);
+  const { rows } = await pool.query('SELECT owner_id FROM crime_records WHERE id=$1', [req.params.id]);
+  if (!rows[0]) return res.status(404).json({ message: 'Record not found.' });
+  if (req.admin.id !== 'admin' && String(rows[0].owner_id) !== String(req.admin.id)) {
+    return res.status(403).json({ message: 'You can only delete your own records.' });
+  }
+  await pool.query('DELETE FROM crime_records WHERE id=$1', [req.params.id]);
   res.status(204).end();
 }));
 app.use((error, req, res, next) => { console.error(error); res.status(500).json({ message: 'ဆာဗာအတွင်း အမှားတစ်ခု ဖြစ်ပွားပါသည်။' }); });

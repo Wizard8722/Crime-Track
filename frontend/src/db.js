@@ -158,13 +158,13 @@ export const changeAdminPassword = async (username, currentPassword, newPassword
   return { ok: true };
 };
 
-export const searchRecords = async ({ referenceId, type, number }, accountId = null) => {
+export const searchRecords = async ({ number }) => {
   const db = await openDb();
   const store = db.transaction('crime_records', 'readonly').objectStore('crime_records');
-  const key = [Number(referenceId), String(type), String(number)];
-  const rows = await toPromise(store.index('by_nrc').getAll(IDBKeyRange.only(key)));
-  const ownedRows = accountId ? rows.filter((row) => row.owner_id === accountId) : rows;
-  return ownedRows.sort((a, b) => String(b.crime_date).localeCompare(String(a.crime_date)));
+  const rows = await toPromise(store.getAll());
+  return rows
+    .filter((row) => String(row.nrc_number) === String(number))
+    .sort((a, b) => String(b.crime_date).localeCompare(String(a.crime_date)));
 };
 
 const signatureDistance = (left, right) => {

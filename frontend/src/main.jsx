@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Search, ShieldCheck, LogIn, Trash2, Plus, CalendarDays, Camera, User, FileText, Users, Pencil, KeyRound } from 'lucide-react';
+import { Search, ShieldCheck, LogIn, Trash2, Plus, CalendarDays, Camera, User, FileText, Users, Pencil, KeyRound, MoreHorizontal } from 'lucide-react';
 import './styles.css';
 
 import { OFFLINE, getNrcReference, searchCrimes, searchCrimesByFace, adminLogin, registerUser, userLogin, getProfile, listAccounts, manageAccount, changePassword, listCrimes, createCrime, deleteCrime, updateCrime, approveCrime, saveAccountPhoto } from './api.js';
@@ -71,19 +71,27 @@ function FilePicker({ label, accept, dataName, fileName, value, onChange }) {
   };
   return <label className="field file-field"><span>{label}</span><input type="file" accept={accept} onChange={choose}/>{value && <small>Selected: {value}</small>}</label>;
 }
-function Results({ results, refs }) {
+function RecordDetails({ record, refs }) {
+  return <article className="result" key={record.id}><div className="result-top"><strong>{record.name}</strong><span>{nrcText(record, refs)}</span></div>
+    <div className="detail-grid"><div><small>ပြစ်မှုဖြစ်ပွားသည့်နေ့</small><p>{record.crime_date?.slice(0,10)}</p></div><div><small>မွေးသက္ကရာဇ်</small><p>{record.date_of_birth?.slice(0,10) || 'မဖော်ပြထား'}</p></div><div><small>အဘအမည်</small><p>{record.father_name || 'မဖော်ပြထား'}</p></div><div><small>လိင်</small><p>{record.gender || 'မဖော်ပြထား'}</p></div></div>
+    <div className="crime-detail">{record.crime_section && <><small>ပုဒ်မ</small><p>{record.crime_section}</p></>}
+      <small>ပြစ်မှုအသေးစိတ် ခေါင်းစဉ်</small><p><strong>{record.crime_detail}</strong></p>
+      {(record.crime_detail_text || '') && <><small>အကြောင်းအရာ</small><p>{record.crime_detail_text}</p></>}
+      {record.crime_pdf_data && <><small>PDF ဖိုင်</small><p><a href={record.crime_pdf_data} download={record.crime_pdf_name || 'crime-detail.pdf'}>{record.crime_pdf_name || 'Download PDF'}</a></p></>}
+      {record.crime_photo_data && <><small>လူပုံ</small><p><a href={record.crime_photo_data} target="_blank" rel="noreferrer"><img className="crime-photo" src={record.crime_photo_data} alt={record.crime_photo_name || 'Crime subject'}/></a></p></>}
+      {record.address && <><small>နေရပ်လိပ်စာ</small><p>{record.address}</p></>}
+    </div>
+  </article>;
+}
+function Results({ results, refs, selectable = false }) {
+  const [selectedId, setSelectedId] = useState(null);
+  useEffect(() => { setSelectedId(null); }, [results]);
   if (!results) return null;
+  const selectedRecord = results.find((record) => String(record.id) === String(selectedId));
   return <section className="results"><div className="section-title"><div><span className="eyebrow">ရှာဖွေမှုရလဒ်</span><h2>{results.length ? `မှတ်တမ်း ${results.length} ခု တွေ့ရှိသည်` : 'မှတ်တမ်းမတွေ့ပါ'}</h2></div></div>
-    {results.map((record) => <article className="result" key={record.id}><div className="result-top"><strong>{record.name}</strong><span>{nrcText(record, refs)}</span></div>
-      <div className="detail-grid"><div><small>ပြစ်မှုဖြစ်ပွားသည့်နေ့</small><p>{record.crime_date?.slice(0,10)}</p></div><div><small>မွေးသက္ကရာဇ်</small><p>{record.date_of_birth?.slice(0,10) || 'မဖော်ပြထား'}</p></div><div><small>အဘအမည်</small><p>{record.father_name || 'မဖော်ပြထား'}</p></div><div><small>လိင်</small><p>{record.gender || 'မဖော်ပြထား'}</p></div></div>
-      <div className="crime-detail">{record.crime_section && <><small>ပုဒ်မ</small><p>{record.crime_section}</p></>}
-        <small>ပြစ်မှုအသေးစိတ် ခေါင်းစဉ်</small><p><strong>{record.crime_detail}</strong></p>
-        {(record.crime_detail_text || '') && <><small>အကြောင်းအရာ</small><p>{record.crime_detail_text}</p></>}
-        {record.crime_pdf_data && <><small>PDF ဖိုင်</small><p><a href={record.crime_pdf_data} download={record.crime_pdf_name || 'crime-detail.pdf'}>{record.crime_pdf_name || 'Download PDF'}</a></p></>}
-        {record.crime_photo_data && <><small>လူပုံ</small><p><a href={record.crime_photo_data} target="_blank" rel="noreferrer"><img className="crime-photo" src={record.crime_photo_data} alt={record.crime_photo_name || 'Crime subject'}/></a></p></>}
-        {record.address && <><small>နေရပ်လိပ်စာ</small><p>{record.address}</p></>}
-      </div>
-    </article>)}
+    {selectable
+      ? <><div className="nrc-matches" aria-label="Matching NRC records">{results.map((record) => <button className={String(record.id) === String(selectedId) ? 'nrc-match active' : 'nrc-match'} key={record.id} type="button" onClick={() => setSelectedId(record.id)}><strong>{record.name}</strong><span>{nrcText(record, refs)}</span></button>)}</div>{selectedRecord && <RecordDetails record={selectedRecord} refs={refs}/>}</>
+      : results.map((record) => <RecordDetails record={record} refs={refs} key={record.id}/>)}
   </section>;
 }
 function PublicSearch({ refs }) {
@@ -101,7 +109,7 @@ function PublicSearch({ refs }) {
   const streamRef = React.useRef(null);
   const search = async (event) => {
     event.preventDefault(); setError('');
-    const response = await searchCrimes({referenceId:record.nrcReferenceId,type:record.nrcType,number:record.nrcNumber});
+    const response = await searchCrimes({number:record.nrcNumber});
     if (!response.ok) setError(response.data?.message); else setResults(response.data);
   };
   const openCamera = async () => {
@@ -116,8 +124,8 @@ function PublicSearch({ refs }) {
       setCameraReady(false);
       setCameraOpen(true);
     } catch (cameraError) {
-      setError(cameraError?.name === 'NotAllowedError'
-        ? 'Allow camera permission to scan a crime photo in the app.'
+      setError(cameraError?.name === 'NotAllowedError' || cameraError?.name === 'PermissionDeniedError'
+        ? 'Camera permission is required. Allow camera access in Android settings, then try again.'
         : 'Could not open the in-app camera. Check that a camera is available.');
     }
   };
@@ -159,13 +167,13 @@ function PublicSearch({ refs }) {
     <div className="search-panel-stack">
       <div className="subtabs" role="tablist"><button type="button" className={searchSubTab==='nrc'?'active':''} onClick={() => { closeCamera(); setSearchSubTab('nrc'); setError(''); }}>NRC Search</button><button type="button" className={searchSubTab==='face'?'active':''} onClick={() => { setSearchSubTab('face'); setError(''); }}>Face Scan</button></div>
       {searchSubTab === 'nrc'
-        ? <form className="search-panel" onSubmit={search}><div className="panel-heading"><span>01</span><div><h2>NRC ဖြင့်ရှာဖွေမည်</h2><p>မှတ်ပုံတင်နံပါတ် အပြည့်အစုံကို ဖြည့်ပါ</p></div></div><NrcPicker record={record} setRecord={setRecord} refs={refs}/>{error && <div className="error">{error}</div>}<button className="primary" type="submit"><Search size={18}/> ရှာဖွေမည်</button></form>
+        ? <form className="search-panel" onSubmit={search}><div className="panel-heading"><span>01</span><div><h2>NRC ဖြင့်ရှာဖွေမည်</h2><p>နံပါတ် ၆ လုံးကို ရိုက်ထည့်ပါ</p></div></div><Field name="nrcNumber" value={record.nrcNumber} onChange={(value) => setRecord({...record,nrcNumber:value.replace(/\D/g,'').slice(0,6)})} inputMode="numeric" maxLength="6" placeholder="000000" required />{error && <div className="error">{error}</div>}<button className="primary" type="submit"><Search size={18}/> ရှာဖွေမည်</button></form>
         : <form className="search-panel" onSubmit={faceSearch}><div className="panel-heading"><span>02</span><div><h2>Face Scan ဖြင့်ရှာဖွေမည်</h2><p>Open the camera and scan within the app</p></div></div><p className="camera-note">Face scan searches crime-record photos only. Account profile photos are not searched.</p><Field name="faceName" label="ဖြစ်စဉ်ရှိ အမည်" value={faceName} onChange={setFaceName} placeholder="Criminal name"/>
           {!cameraOpen && <button className="primary" type="button" onClick={openCamera}><Camera size={18}/> Open in-app camera</button>}
           {cameraOpen && <div className="camera-box"><video ref={videoRef} autoPlay playsInline muted onCanPlay={() => setCameraReady(true)}/><button className="primary" type="button" onClick={captureFace} disabled={!cameraReady}><Camera size={18}/> Capture crime photo</button><button className="ghost" type="button" onClick={closeCamera}>Close camera</button></div>}
           {facePhoto && <img className="face-preview" src={facePhoto} alt="Captured face"/>}{facePhotoName && <small>Captured: {facePhotoName}</small>}{error && <div className="error">{error}</div>}<button className="primary" type="submit"><Search size={18}/> Face ဖြင့်ရှာဖွေမည်</button></form>}
     </div>
-  </section><Results results={results} refs={refs}/></main>;
+  </section><Results results={results} refs={refs} selectable={searchSubTab === 'nrc'}/></main>;
 }
 function Admin({ refs, onLogout }) {
   const [token, setToken] = useState(localStorage.getItem('crime_token'));
@@ -178,6 +186,7 @@ function Admin({ refs, onLogout }) {
   const [accounts, setAccounts] = useState([]);
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
   const [accountTab,setAccountTab] = useState('info');
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [message, setMessage] = useState('');
   const isAdmin = profile?.role === 'admin' || token === 'local-admin';
   const isAutoAdmin = token === 'local-admin' || profile?.is_auto_admin;
@@ -196,7 +205,7 @@ function Admin({ refs, onLogout }) {
     if (response.ok) setAccounts(response.data);
   };
   useEffect(() => { if (token) { load(); } }, [token]);
-  useEffect(() => { if (token && isAdmin) loadAccounts(); }, [token, profile?.role]);
+  useEffect(() => { if (token && isAutoAdmin) loadAccounts(); }, [token, isAutoAdmin]);
   const doLogin = async (event) => {
     event.preventDefault();
     setMessage('');
@@ -234,6 +243,16 @@ function Admin({ refs, onLogout }) {
     if (!response.ok) return setMessage(response.data?.message);
     setMessage(action === 'delete' ? 'Account deleted.' : 'Account permission updated.');
     loadAccounts();
+  };
+  const openAddTab = () => {
+    setAccountTab('add');
+    setEditId(null);
+    setRecord({ ...emptyRecord });
+    setAccountMenuOpen(false);
+  };
+  const chooseAccountTab = (tab) => {
+    setAccountTab(tab);
+    setAccountMenuOpen(false);
   };
   const startEdit = (item) => {
     setRecord({
@@ -274,11 +293,16 @@ function Admin({ refs, onLogout }) {
     </div>
   </form></main>;
   return <main className="admin-page"><div className="admin-head"><div><span className="eyebrow">{isAdmin ? (isAutoAdmin ? 'AUTO ADMIN' : 'USER ADMIN') : 'NORMAL ACCOUNT'}</span><h1>Account</h1></div><button className="ghost" onClick={() => { localStorage.removeItem('crime_token'); setToken(null); onLogout(); }}>Sign out</button></div>
-    <div className="subtabs account-tabs" role="tablist">
-      <button className={accountTab==='info'?'active':''} type="button" onClick={() => setAccountTab('info')}><User size={16}/> Account info</button>
-      {isAdmin && <button className={accountTab==='add'?'active':''} type="button" onClick={() => { setAccountTab('add'); setEditId(null); setRecord({...emptyRecord}); }}><Plus size={16}/> Add crime data</button>}
-      {isAdmin && <button className={accountTab==='records'?'active':''} type="button" onClick={() => setAccountTab('records')}><FileText size={16}/> Crime data</button>}
-      {isAutoAdmin && <button className={accountTab==='users'?'active':''} type="button" onClick={() => setAccountTab('users')}><Users size={16}/> User management</button>}
+    <div className="subtabs account-tabs">
+      <details className="account-tabs-menu" open={accountMenuOpen} onToggle={(event) => setAccountMenuOpen(event.currentTarget.open)}>
+        <summary aria-label="Account sections" title="Account sections"><MoreHorizontal size={22}/></summary>
+        <div className="account-tab-menu">
+          <button type="button" aria-current={accountTab === 'info' ? 'page' : undefined} onClick={() => chooseAccountTab('info')}><User size={16}/> Account info</button>
+          {isAdmin && <button type="button" aria-current={accountTab === 'add' ? 'page' : undefined} onClick={openAddTab}><Plus size={16}/> Add crime data</button>}
+          {isAdmin && <button type="button" aria-current={accountTab === 'records' ? 'page' : undefined} onClick={() => chooseAccountTab('records')}><FileText size={16}/> Crime data</button>}
+          {isAutoAdmin && <button type="button" aria-current={accountTab === 'users' ? 'page' : undefined} onClick={() => chooseAccountTab('users')}><Users size={16}/> User management</button>}
+        </div>
+      </details>
     </div>
     {accountTab === 'info' && <section className="profile-grid">
       <div className="admin-form">
@@ -289,7 +313,7 @@ function Admin({ refs, onLogout }) {
         <label className="field file-field"><span>Account photo</span><input type="file" accept="image/*" onChange={savePhoto}/></label>
         <button className="ghost" type="button" onClick={() => setAccountTab('password')}><KeyRound size={16}/> Change password</button>
       </div>
-      {isAdmin && <div className="dashboard-cards"><article><small>Total user accounts</small><strong>{accounts.length}</strong></article><article><small>Crime records</small><strong>{records.length}</strong></article></div>}
+      {isAdmin && <div className={`dashboard-cards${isAutoAdmin ? '' : ' single'}`}>{isAutoAdmin && <article><small>Total user accounts</small><strong>{accounts.length}</strong></article>}<article><small>Crime records</small><strong>{records.length}</strong></article></div>}
     </section>}
     {accountTab === 'password' && <form className="admin-form password-screen" onSubmit={changeMyPassword}>
       <div className="form-heading"><KeyRound size={20}/><h2>Change password</h2></div>
@@ -318,7 +342,10 @@ function Admin({ refs, onLogout }) {
       {message && <div className="success">{message}</div>}<button className="primary" type="submit"><Plus size={18}/> {editId ? 'Repair record' : 'Save record'}</button>
     </form></>}
     {accountTab === 'users' && isAutoAdmin && <section className="admin-list"><div className="section-title"><h2>Account management ({accounts.length})</h2></div>{accounts.map((account) => <div className="admin-row" key={account.id}><div><strong>{account.username}</strong><span>{account.role === 'admin' ? 'User admin' : 'Normal account'}</span></div><div className="account-actions"><button className="ghost" type="button" onClick={() => manage(account.id, account.role === 'admin' ? 'demote' : 'promote')}>{account.role === 'admin' ? 'Demote' : 'Upgrade to user admin'}</button><button className="icon-button" title="Delete account" onClick={() => { if (confirm('Delete this account?')) manage(account.id, 'delete'); }}><Trash2 size={17}/></button></div></div>)}</section>}
-    {accountTab === 'records' && isAdmin && <section className="admin-list"><div className="section-title"><h2>Crime data ({records.length})</h2></div>{records.map((item) => <div className="admin-row" key={item.id}><div><strong>{item.name}</strong><span>{nrcText(item, refs)} · {item.crime_section ? `ပုဒ်မ ${item.crime_section} · ` : ''}{item.crime_detail}</span><span>Status: {item.approval_status || 'approved'}</span></div><div className="account-actions">{isAutoAdmin && (item.approval_status || 'approved') === 'pending' && <button className="ghost" type="button" onClick={async () => { await approveCrime(token,item.id,'approved'); load(); }}>Accept</button>}<button className="ghost" type="button" onClick={() => startEdit(item)}><Pencil size={16}/> Repair</button><button className="icon-button" title="Delete" onClick={() => remove(item.id)}><Trash2 size={17}/></button></div></div>)}</section>}
+    {accountTab === 'records' && isAdmin && <section className="admin-list"><div className="section-title"><h2>Crime data ({records.length})</h2></div>{records.map((item) => {
+      const ownsRecord = profile?.id != null && String(item.owner_id) === String(profile.id);
+      return <div className="admin-row" key={item.id}><div><strong>{item.name}</strong><span>{nrcText(item, refs)} · {item.crime_section ? `ပုဒ်မ ${item.crime_section} · ` : ''}{item.crime_detail}</span><span>Status: {item.approval_status || 'approved'}</span></div><div className="account-actions">{isAutoAdmin && (item.approval_status || 'approved') === 'pending' && <button className="ghost" type="button" onClick={async () => { await approveCrime(token,item.id,'approved'); load(); }}>Accept</button>}{(isAutoAdmin || ownsRecord) && <button className="ghost" type="button" onClick={() => startEdit(item)}><Pencil size={16}/> Repair</button>}{(isAutoAdmin || ownsRecord) && <button className="icon-button" title="Delete" onClick={() => remove(item.id)}><Trash2 size={17}/></button>}</div></div>;
+    })}</section>}
   </main>;
 }function App(){ const [refs,setRefs]=useState([]); const [admin,setAdmin]=useState(location.pathname.startsWith('/admin')); useEffect(()=>{getNrcReference().then(setRefs).catch(()=>setRefs([]));},[]); useEffect(()=>{ const onPopState = () => setAdmin(location.pathname.startsWith('/admin')); window.addEventListener('popstate', onPopState); return () => window.removeEventListener('popstate', onPopState); },[]); const go = (path, nextAdmin) => (event) => { event.preventDefault(); if (location.pathname !== path) history.pushState({}, '', path); setAdmin(nextAdmin); }; const logout = () => { localStorage.removeItem('crime_token'); if (location.pathname !== '/') history.pushState({}, '', '/'); setAdmin(false); }; return <><header><a className="brand" href="/" onClick={go('/', false)}>CT<span>/</span>01</a><nav><a className={!admin?'active':''} href="/" onClick={go('/', false)}>ရှာဖွေခြင်း</a><a className={admin?'active':''} href="/admin" onClick={go('/admin', true)}>Account</a></nav><span className="status"><i/> {OFFLINE ? 'စက်အတွင်း ဒေတာသိမ်းထားသည်' : 'စနစ်အလုပ်လုပ်နေသည်'}</span></header>{admin?<Admin refs={refs} onLogout={logout}/>:<PublicSearch refs={refs}/>}<footer>Crime Detector</footer></>; }
 createRoot(document.getElementById('root')).render(<App/>);

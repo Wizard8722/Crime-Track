@@ -48,3 +48,4 @@ ALTER TABLE crime_records ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL
 ALTER TABLE users ADD COLUMN IF NOT EXISTS account_photo TEXT;
 CREATE INDEX IF NOT EXISTS crime_records_nrc_idx ON crime_records (nrc_state_code, nrc_township_code, nrc_type, nrc_number);
 CREATE INDEX IF NOT EXISTS crime_records_nrc_reference_idx ON crime_records (nrc_reference_id, nrc_type, nrc_number);
+CREATE INDEX IF NOT EXISTS crime_records_nrc_number_idx ON crime_records (nrc_number);

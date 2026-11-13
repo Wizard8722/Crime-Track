@@ -33,9 +33,9 @@ export const getNrcReference = async () => {
 };
 export const searchCrimes = async (query) => {
   if (OFFLINE) {
-    const { referenceId, type, number } = query;
-    if (!/^\d+$/.test(String(referenceId)) || !/^[NEP]$/.test(String(type)) || !/^\d{6}$/.test(String(number))) return fail(400, MESSAGES.format);
-    return ok(await searchRecords({ referenceId, type, number }));
+    const { number } = query;
+    if (!/^\d{6}$/.test(String(number))) return fail(400, MESSAGES.format);
+    return ok(await searchRecords({ number }));
   }
   return http(`/crimes/search?${new URLSearchParams(query)}`);
 };
@@ -107,7 +107,7 @@ export const listCrimes = async (token) => {
     if (denied) return denied;
     if (token === 'local-admin') return ok(await allRecords());
     const account = await getAccount(accountFromToken(token));
-    return account?.role === 'admin' ? ok(await allRecords(account.id)) : ok([]);
+    return account?.role === 'admin' ? ok(await allRecords()) : ok([]);
   }
   return http('/admin/crimes', { headers: authHeaders(token) });
 };
