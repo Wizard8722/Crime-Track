@@ -158,12 +158,15 @@ export const changeAdminPassword = async (username, currentPassword, newPassword
   return { ok: true };
 };
 
-export const searchRecords = async ({ number }) => {
+export const searchRecords = async ({ number, stateCode, townshipCodes, type }) => {
   const db = await openDb();
   const store = db.transaction('crime_records', 'readonly').objectStore('crime_records');
   const rows = await toPromise(store.getAll());
   return rows
-    .filter((row) => String(row.nrc_number) === String(number))
+    .filter((row) => String(row.nrc_number) === String(number)
+      && (stateCode === undefined || Number(row.nrc_state_code) === stateCode)
+      && (type === undefined || String(row.nrc_type).toUpperCase() === type)
+      && (townshipCodes === undefined || townshipCodes.includes(String(row.nrc_township_code))))
     .sort((a, b) => String(b.crime_date).localeCompare(String(a.crime_date)));
 };
 

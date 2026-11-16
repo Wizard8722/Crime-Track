@@ -89,9 +89,17 @@ app.delete('/api/admin/accounts/:id/delete', authenticate, requireAdmin, asyncRo
   res.status(204).end();
 }));
 app.get('/api/crimes/search', asyncRoute(async (req, res) => {
-  const { number } = req.query;
-  if (!/^\d{6}$/.test(String(number))) return res.status(400).json({ message: 'NRC နံပါတ် ပုံစံမမှန်ပါ။' });
-  const { rows } = await pool.query('SELECT id, name, nrc_state_code, nrc_township_code, nrc_reference_id, nrc_type, nrc_number, date_of_birth, gender, crime_date, crime_section, crime_detail, crime_detail_text, crime_pdf_name, crime_pdf_data, crime_photo_name, crime_photo_data, father_name, address, created_at FROM crime_records WHERE nrc_number=$1 ORDER BY crime_date DESC', [number]);
+  const { number, stateCode, townshipCode, type } = req.query;
+  const state = String(stateCode ?? '').trim();
+  const township = String(townshipCode ?? '').trim();
+  const nrcType = String(type ?? '').trim();
+  if (!/^\d{6}$/.test(String(number))
+    || (state && !/^\d{1,2}$/.test(state))
+    || (township && /[\/()]/.test(township))
+    || (nrcType && !/^[NEP]$/i.test(nrcType))) {
+    return res.status(400).json({ message: 'NRC နံပါတ် ပုံစံမမှန်ပါ။' });
+  }
+  const { rows } = await pool.query('SELECT id, name, nrc_state_code, nrc_township_code, nrc_reference_id, nrc_type, nrc_number, date_of_birth, gender, crime_date, crime_section, crime_detail, crime_detail_text, crime_pdf_name, crime_pdf_data, crime_photo_name, crime_photo_data, father_name, address, created_at FROM crime_records WHERE nrc_number=$1 AND ($2::INTEGER IS NULL OR nrc_state_code=$2) AND ($3::TEXT IS NULL OR UPPER(nrc_township_code)=UPPER($3) OR EXISTS (SELECT 1 FROM nrc_reference WHERE nrc_reference.id=crime_records.nrc_reference_id AND UPPER(nrc_reference.township_code_en)=UPPER($3))) AND ($4::TEXT IS NULL OR UPPER(nrc_type)=UPPER($4)) ORDER BY crime_date DESC', [number, state ? Number(state) : null, township || null, nrcType || null]);
   res.json(rows);
 }));
 app.post('/api/crimes/face-search', asyncRoute(async (req, res) => {
