@@ -19,3 +19,27 @@ body{min-height:100vh;background:linear-gradient(135deg,#10251db8,#10251da6),url
 .file-field small{color:#74817a}.crime-photo{display:block;width:min(240px,100%);max-height:280px;object-fit:cover;border-radius:5px;border:1px solid #dce4da;margin-top:6px}.crime-detail a{color:#214c3a;font-weight:600}.file-field input[type=file]{padding:8px;background:#fff}.file-field input[type=file]::file-selector-button{border:0;background:#214c3a;color:#fff;border-radius:3px;padding:8px 12px;margin-right:10px;cursor:pointer}
 .search-panel-stack{display:grid;gap:16px}.face-preview{display:block;width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid #dce4da;margin:8px 0}
 .subtabs{display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid #d7e0d6;padding-bottom:8px}.subtabs button{border:0;background:transparent;color:#61706a;padding:10px 14px;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:7px}.subtabs button.active{background:#214c3a;color:#fff}.account-tabs{position:relative;justify-content:flex-end;margin-bottom:24px}.account-tabs-menu{position:relative}.account-tabs-menu summary{list-style:none;display:flex;align-items:center;justify-content:center;padding:8px 12px;border:1px solid #c8d5c9;border-radius:4px;color:#52665a;cursor:pointer}.account-tabs-menu summary::-webkit-details-marker{display:none}.account-tabs-menu[open] summary{background:#214c3a;color:#fff}.account-tab-menu{position:absolute;z-index:4;right:0;top:calc(100% + 6px);min-width:210px;padding:6px;background:#fff;border:1px solid #dce4da;border-radius:5px;box-shadow:0 10px 28px #2e4f3920}.account-tabs .account-tab-menu button{width:100%;padding:10px 12px;text-align:left;white-space:nowrap}.account-tabs .account-tab-menu button[aria-current="page"]{background:#214c3a;color:#fff}.dashboard-cards.single{grid-template-columns:1fr}.camera-box{border:1px solid #dce4da;padding:10px;border-radius:5px;margin-top:10px}.camera-box video{display:block;width:100%;max-height:360px;background:#111;border-radius:4px;margin-bottom:10px}.account-photo{width:120px;height:120px;object-fit:cover;border-radius:50%;border:1px solid #dce4da;margin:10px 0}.password-screen{max-width:520px}
+@media(max-width:480px){
+  header{height:auto;min-height:64px;padding:8px 14px;gap:12px}
+  .brand{font-size:22px}
+  nav{gap:12px}
+  nav a{font-size:12px;padding:18px 0;white-space:nowrap}
+  .hero{padding:40px 16px 54px}
+  .hero-copy{margin-bottom:32px}
+  .hero h1{font-size:clamp(48px,17vw,72px)}
+  .search-panel,.admin-form{padding:18px 16px}
+  .panel-heading{gap:12px;padding-bottom:18px;margin-bottom:18px}
+  .panel-heading h2{font-size:18px}
+  .results,.admin-list,.admin-page{padding-left:16px;padding-right:16px}
+  .result{padding:18px 16px}
+  .result-top span,.admin-row span{overflow-wrap:anywhere}
+  .admin-head{flex-wrap:wrap;align-items:center}
+  .admin-row{flex-wrap:wrap;align-items:flex-start;gap:12px;padding:14px 16px}
+  .admin-row>div:first-child{min-width:0;flex:1 1 100%}
+  .account-actions{flex-wrap:wrap;gap:6px}
+  .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .dashboard-cards{gap:8px}
+  .dashboard-cards article{padding:16px}
+  .subtabs{gap:4px}
+  .subtabs button{padding:8px 10px;font-size:12px}
+}

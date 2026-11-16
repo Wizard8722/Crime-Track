@@ -31,13 +31,48 @@ export const getNrcReference = async () => {
   if (OFFLINE) return referenceData();
   try { return await (await fetch(`${API}/nrc-reference`)).json(); } catch { return []; }
 };
-export const searchCrimes = async (query) => {
-  if (OFFLINE) {
-    const { number } = query;
-    if (!/^\d{6}$/.test(String(number))) return fail(400, MESSAGES.format);
-    return ok(await searchRecords({ number }));
+const parseNrcSearch = (query) => {
+  const source = typeof query === 'string' ? { number: query } : query || {};
+  const value = String(source.number ?? '').trim();
+  if (/^\d{6}$/.test(value)) {
+    const parsed = { number: value };
+    const stateCode = String(source.stateCode ?? '').trim();
+    const townshipCode = String(source.townshipCode ?? '').trim();
+    const type = String(source.type ?? '').trim();
+    if (stateCode) {
+      if (!/^\d{1,2}$/.test(stateCode)) return null;
+      parsed.stateCode = Number(stateCode);
+    }
+    if (townshipCode) {
+      if (/[\/()]/.test(townshipCode)) return null;
+      parsed.townshipCode = townshipCode;
+    }
+    if (type) {
+      if (!/^[NEP]$/i.test(type)) return null;
+      parsed.type = type.toUpperCase();
+    }
+    return parsed;
   }
-  return http(`/crimes/search?${new URLSearchParams(query)}`);
+  const match = /^(\d{1,2})\s*\/\s*([^\s/()]+)\s*\(\s*([NEP])\s*\)\s*(\d{6})$/i.exec(value);
+  if (!match) return null;
+  return { stateCode: Number(match[1]), townshipCode: match[2], type: match[3].toUpperCase(), number: match[4] };
+};
+const normalizeNrcCode = (value) => String(value || '').trim().toUpperCase();
+export const searchCrimes = async (query) => {
+  const parsed = parseNrcSearch(query);
+  if (!parsed) return fail(400, MESSAGES.format);
+  if (OFFLINE) {
+    if ('townshipCode' in parsed) {
+      const references = await referenceData();
+      const townshipCodes = references
+        .filter((item) => (parsed.stateCode === undefined || Number(item.state_code) === parsed.stateCode)
+          && [item.township_code_mm, item.township_code_en].some((code) => normalizeNrcCode(code) === normalizeNrcCode(parsed.townshipCode)))
+        .map((item) => item.township_code_mm);
+      return ok(await searchRecords({ ...parsed, townshipCodes }));
+    }
+    return ok(await searchRecords(parsed));
+  }
+  return http(`/crimes/search?${new URLSearchParams(parsed)}`);
 };
 export const searchCrimesByFace = async ({ signature, name = '' }) => {
   if (OFFLINE) {
